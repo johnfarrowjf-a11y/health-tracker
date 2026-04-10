@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Health Log">
+<meta name="theme-color" content="#ffffff">
+<title>Health Log</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#ffffff;--bg2:#f7f6f3;--bg3:#eeede8;
+  --text:#1a1a1a;--text2:#6b7280;--text3:#9ca3af;
+  --border:rgba(0,0,0,0.1);--border2:rgba(0,0,0,0.2);--border3:rgba(0,0,0,0.35);
+  --r-sm:6px;--r-md:8px;--r-lg:12px;--r-xl:16px;
+  --success-bg:#d4edda;--success-text:#155724;
+  --warning-bg:#fff3cd;--warning-text:#856404;
+  --danger-bg:#f8d7da;--danger-text:#721c24;
+  --info-bg:#d1ecf1;--info-text:#0c5460;
+  --amber:#ef9f27;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg2);color:var(--text);font-size:14px;line-height:1.5;min-height:100dvh;padding-bottom:env(safe-area-inset-bottom)}
+
+/* ── Setup screen ── */
+#setup{display:none;max-width:460px;margin:0 auto;padding:24px 20px 40px}
+#setup.visible{display:block}
+.setup-logo{font-size:28px;font-weight:600;letter-spacing:-0.5px;margin-bottom:6px}
+.setup-sub{font-size:14px;color:var(--text2);margin-bottom:28px;line-height:1.5}
+.setup-step{margin-bottom:22px}
+.setup-step-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text2);margin-bottom:6px}
+.setup-step h3{font-size:15px;font-weight:500;margin-bottom:6px}
+.setup-step p{font-size:13px;color:var(--text2);margin-bottom:10px;line-height:1.5}
+.setup-step a{color:#1d6fb8;text-decoration:none}
+.setup-step a:hover{text-decoration:underline}
+.sql-block{background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--r-md);padding:10px 12px;font-family:'SF Mono',Menlo,monospace;font-size:11px;color:var(--text);line-height:1.6;white-space:pre;overflow-x:auto;margin-bottom:10px;user-select:all}
+.setup-divider{border:none;border-top:0.5px solid var(--border);margin:24px 0}
+.credentials-section{background:var(--bg);border:0.5px solid var(--border2);border-radius:var(--r-lg);padding:18px;margin-bottom:20px}
+.credentials-section h3{font-size:14px;font-weight:500;margin-bottom:14px}
+.field-group{margin-bottom:14px}
+.field-group:last-child{margin-bottom:0}
+.field-label{font-size:11px;font-weight:500;color:var(--text2);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em}
+.setup-input{width:100%;padding:10px 12px;border:0.5px solid var(--border2);border-radius:var(--r-md);font-size:13px;font-family:inherit;background:var(--bg);color:var(--text)}
+.setup-input:focus{outline:none;border-color:var(--border3)}
+.setup-btn{width:100%;padding:13px;background:var(--text);color:#fff;border:none;border-radius:var(--r-md);font-size:15px;font-weight:500;cursor:pointer;font-family:inherit}
+.setup-btn:hover{opacity:0.88}
+.setup-error{font-size:12px;color:var(--danger-text);background:var(--danger-bg);padding:8px 12px;border-radius:var(--r-md);margin-bottom:14px}
+
+/* ── App shell ── */
+#app{display:none;max-width:480px;margin:0 auto;min-height:100dvh;background:var(--bg);flex-direction:column}
+#app.visible{display:flex}
+.app-header{padding:14px 18px 12px;border-bottom:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--bg);z-index:10}
+.app-date{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:0.07em}
+.app-title{font-size:17px;font-weight:600;margin-top:2px}
+.save-badge{font-size:11px;color:var(--success-text);background:var(--success-bg);padding:3px 9px;border-radius:20px}
+.tab-bar{display:flex;border-bottom:0.5px solid var(--border);background:var(--bg);position:sticky;top:64px;z-index:9}
+.tab-btn{flex:1;padding:11px 2px;border:none;border-bottom:2px solid transparent;background:transparent;font-size:11px;font-weight:400;color:var(--text2);cursor:pointer;font-family:inherit;transition:color 0.1s}
+.tab-btn.active{border-bottom-color:var(--text);color:var(--text);font-weight:500}
+.tab-content{padding:15px 16px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+
+/* ── Common components ── */
+.btn{border:0.5px solid var(--border);border-radius:var(--r-md);background:transparent;color:var(--text);cursor:pointer;font-family:inherit;font-size:13px;padding:9px 12px;transition:background 0.1s;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{background:var(--bg2)}
+.btn:active{transform:scale(0.98)}
+.btn.primary{background:var(--text);color:#fff;border-color:var(--text)}
+.btn.primary:hover{opacity:0.88}
+.btn.active{border-width:1.5px;border-color:var(--text);background:var(--bg2);font-weight:500}
+.btn.dashed{border-style:dashed;color:var(--text2);width:100%;justify-content:center;margin-top:6px}
+.btn.full{width:100%;justify-content:center}
+.btn.round{border-radius:50%;width:32px;height:32px;padding:0;justify-content:center;background:var(--bg2);flex-shrink:0}
+.btn.round.listening{background:var(--danger-bg);border-color:#f5c6cb;animation:mpulse 1s ease-in-out infinite}
+.btn.pill{border-radius:20px;padding:5px 10px;font-size:12px;gap:4px}
+.btn.pill:active{transform:scale(0.97)}
+@keyframes mpulse{0%,100%{opacity:1}50%{opacity:0.5}}
+.inp{width:100%;padding:9px 11px;border:0.5px solid var(--border);border-radius:var(--r-md);background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;box-sizing:border-box}
+.inp:focus{outline:none;border-color:var(--border3)}
+.inp-row{display:flex;align-items:flex-start;gap:6px}
+.inp-row .inp{flex:1}
+.card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--r-lg);padding:12px 14px;margin-bottom:9px}
+.card-title{font-weight:500;font-size:14px}
+.card-meta{font-size:12px;color:var(--text2);margin-top:2px}
+.card-note{font-size:11px;color:var(--text2);margin-top:2px;font-style:italic}
+.panel{background:var(--bg2);border-radius:var(--r-lg);padding:12px 14px;margin-bottom:13px}
+.divider{border:none;border-top:0.5px solid var(--border);margin:18px 0}
+.badge{display:inline-block;font-size:10px;padding:2px 6px;border-radius:var(--r-md);font-weight:500;margin-left:4px;vertical-align:middle}
+.badge.ai{background:var(--info-bg);color:var(--info-text)}
+.badge.coin{background:var(--success-bg);color:var(--success-text)}
+.badge.gerd{color:var(--amber);font-size:10px;margin-left:4px}
+.row{display:flex;gap:8px}
+.row>*{flex:1}
+.lbl{font-size:11px;color:var(--text2);display:block;margin-bottom:4px;font-weight:500}
+
+/* ── Scale buttons ── */
+.scale-row{display:flex;gap:4px;margin-top:5px}
+.scale-btn{flex:1;padding:7px 3px;border:0.5px solid var(--border);border-radius:var(--r-md);background:var(--bg);color:var(--text2);cursor:pointer;font-size:11px;font-family:inherit;text-align:center;line-height:1.4;transition:all 0.1s}
+.scale-btn.s0{border-width:1.5px;background:var(--bg2);color:var(--text);font-weight:500}
+.scale-btn.s1{border-width:1.5px;background:var(--success-bg);color:var(--success-text);border-color:var(--success-text);font-weight:500}
+.scale-btn.s2{border-width:1.5px;background:var(--warning-bg);color:var(--warning-text);border-color:var(--warning-text);font-weight:500}
+.scale-btn.s3{border-width:1.5px;background:var(--danger-bg);color:var(--danger-text);border-color:var(--danger-text);font-weight:500}
+
+/* ── Drinks panel ── */
+.drinks-toggle{display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;margin-bottom:0}
+.drinks-chevron{font-size:10px;color:var(--text2);transition:transform 0.2s;margin-left:4px}
+.drinks-chevron.open{transform:rotate(180deg)}
+.drink-cat{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text2);margin:10px 0 6px}
+.drink-cat:first-child{margin-top:8px}
+.drink-grid{display:flex;flex-wrap:wrap;gap:5px}
+.drink-btn{border:0.5px solid var(--border);border-radius:20px;background:var(--bg);cursor:pointer;font-family:inherit;padding:5px 10px;display:flex;align-items:center;gap:4px;transition:background 0.1s;white-space:nowrap}
+.drink-btn:hover{background:var(--bg3)}
+.drink-btn:active{transform:scale(0.97)}
+.d-name{font-size:12px;color:var(--text)}
+.d-kcal{font-size:10px;color:var(--text2)}
+.gerd-dot{width:5px;height:5px;border-radius:50%;background:var(--amber);flex-shrink:0}
+@keyframes flash{0%{background:var(--success-bg)}100%{background:var(--bg)}}
+.flashed{animation:flash 0.7s ease-out}
+
+/* ── Vision preview ── */
+.photo-wrap{position:relative;margin-bottom:10px}
+.photo-preview{width:100%;border-radius:var(--r-md);border:0.5px solid var(--border);display:block;max-height:180px;object-fit:cover}
+.photo-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.45);border-radius:var(--r-md);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:500}
+.photo-clear{position:absolute;top:7px;right:7px;width:26px;height:26px;border-radius:50%;border:none;background:rgba(0,0,0,0.5);color:#fff;cursor:pointer;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center}
+.info-box{font-size:11px;padding:6px 10px;border-radius:var(--r-md);margin-bottom:8px}
+.info-box.info{background:var(--info-bg);color:var(--info-text)}
+.info-box.success{background:var(--success-bg);color:var(--success-text)}
+.info-box.warning{background:var(--warning-bg);color:var(--warning-text)}
+.info-box.danger{background:var(--danger-bg);color:var(--danger-text)}
+
+/* ── Barcode panel ── */
+.barcode-panel{background:var(--bg2);border:0.5px solid var(--border2);border-radius:var(--r-lg);padding:12px;margin-bottom:10px}
+.product-card{background:var(--bg);border:0.5px solid var(--border2);border-radius:var(--r-md);padding:11px;margin-top:8px}
+
+/* ── Stat cards ── */
+.stat-grid{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.stat-card{background:var(--bg2);border-radius:var(--r-md);padding:11px 12px;flex:1;min-width:0}
+.stat-card .s-label{font-size:11px;color:var(--text2);margin-bottom:3px}
+.stat-card .s-value{font-size:19px;font-weight:600}
+.stat-card .s-unit{font-size:12px;color:var(--text2);font-weight:400;margin-left:2px}
+
+/* ── Charts ── */
+.chart-section{margin-bottom:20px}
+.chart-title{font-size:13px;font-weight:500;margin-bottom:9px}
+.chart-wrap{position:relative;height:148px}
+
+/* ── Symptom bars ── */
+.sym-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.sym-name{font-size:12px;color:var(--text2);width:128px;flex-shrink:0;line-height:1.3}
+.sym-bar-bg{flex:1;height:6px;background:var(--bg2);border-radius:3px;overflow:hidden}
+.sym-bar-fill{height:100%;border-radius:3px}
+.sym-score{font-size:12px;font-weight:500;width:28px;text-align:right;flex-shrink:0}
+
+/* ── Review ── */
+.review-section{margin-bottom:14px;padding:13px;border:0.5px solid var(--border);border-radius:var(--r-lg)}
+.review-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text2);margin-bottom:9px}
+.review-item{font-size:13px;color:var(--text);margin-bottom:7px;padding-bottom:7px;border-bottom:0.5px solid var(--border);line-height:1.5}
+.review-item:last-child{margin-bottom:0;padding-bottom:0;border-bottom:none}
+.conf{display:inline-block;font-size:10px;padding:2px 6px;border-radius:var(--r-md);font-weight:500;margin-left:5px;vertical-align:middle}
+.conf.possible{background:var(--bg2);color:var(--text2)}
+.conf.moderate{background:var(--warning-bg);color:var(--warning-text)}
+.conf.strong{background:var(--danger-bg);color:var(--danger-text)}
+.cta-btn{width:100%;padding:12px;border-radius:var(--r-md);background:var(--text);color:#fff;border:none;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px}
+.cta-btn:hover{opacity:0.88}
+.cta-btn:disabled{opacity:0.45;cursor:not-allowed}
+
+/* ── Spinner ── */
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:16px;height:16px;border:2px solid var(--bg3);border-top-color:var(--text);border-radius:50%;animation:spin 0.7s linear infinite;flex-shrink:0}
+
+/* ── Sleep quality buttons ── */
+.qual-row{display:flex;gap:8px}
+.qual-btn{flex:1;padding:9px;border:0.5px solid var(--border);border-radius:var(--r-md);background:transparent;font-family:inherit;font-size:13px;cursor:pointer;transition:all 0.1s}
+.qual-btn.active{border-width:1.5px;border-color:var(--text);background:var(--bg2);font-weight:500}
+
+/* ── No data ── */
+.empty{text-align:center;padding:28px 0;color:var(--text2);font-size:14px}
+
+/* ── Settings cog ── */
+.settings-btn{position:fixed;bottom:calc(16px + env(safe-area-inset-bottom));right:16px;width:40px;height:40px;border-radius:50%;background:var(--bg);border:0.5px solid var(--border2);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════
+     SETUP SCREEN
+═══════════════════════════════════════════════════════ -->
+<div id="setup">
+  <div style="margin-bottom:32px;padding-top:20px">
+    <div class="setup-logo">Health Log 🩺</div>
+    <div class="setup-sub">Your personal food, symptom and lifestyle tracker.<br>One-time setup needed — takes about 5 minutes.</div>
+  </div>
+
+  <div class="setup-step">
+    <div class="setup-step-label">Step 1 — Supabase database</div>
+    <h3>Create a free database</h3>
+    <p>Supabase stores your diary data securely in the cloud. <a href="https://supabase.com" target="_blank">Go to supabase.com</a>, create a free account, then create a new project.</p>
+    <p>Once your project is ready, open the <strong>SQL Editor</strong> and run this query to create the data table:</p>
+    <div class="sql-block">create table health_logs (
+  id uuid default gen_random_uuid() primary key,
+  date text unique not null,
+  data jsonb not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);</div>
+    <p>Then go to <strong>Project Settings → API</strong> to find your Project URL and anon/public key.</p>
+  </div>
+
+  <hr class="setup-divider">
+
+  <div class="setup-step">
+    <div class="setup-step-label">Step 2 — Anthropic API key</div>
+    <h3>Get your API key</h3>
+    <p>This powers the food photo analysis and weekly AI review. <a href="https://console.anthropic.com" target="_blank">Go to console.anthropic.com</a>, sign in, and create an API key under Account → API Keys.</p>
+  </div>
+
+  <hr class="setup-divider">
+
+  <div class="credentials-section">
+    <h3>Enter your credentials</h3>
+    <div id="setup-error" class="setup-error" style="display:none"></div>
+    <div class="field-group">
+      <label class="field-label">Supabase project URL</label>
+      <input class="setup-input" id="s-url" type="url" placeholder="https://xxxxxxxxxxxx.supabase.co" autocomplete="off">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Supabase anon / public key</label>
+      <input class="setup-input" id="s-key" type="password" placeholder="eyJhbGciOiJIUzI1NiIs…" autocomplete="off">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Anthropic API key</label>
+      <input class="setup-input" id="a-key" type="password" placeholder="sk-ant-…" autocomplete="off">
+    </div>
+    <br>
+    <button class="setup-btn" id="setup-save-btn">Save and open Health Log</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     MAIN APP
+═══════════════════════════════════════════════════════ -->
+<div id="app">
+  <div class="app-header">
+    <div>
+      <div class="app-date" id="app-date"></div>
+      <div class="app-title">Today's log</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span id="save-badge" class="save-badge" style="display:none">Saved ✓</span>
+      <button class="btn round" id="settings-open-btn" title="Settings" style="width:30px;height:30px;border-radius:var(--r-md)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="food">Food</button>
+    <button class="tab-btn" data-tab="symptoms">Symptoms</button>
+    <button class="tab-btn" data-tab="sleep">Sleep</button>
+    <button class="tab-btn" data-tab="dashboard">Dashboard</button>
+  </div>
+
+  <div class="tab-content" id="tab-content"></div>
+</div>
+
+<!-- Settings modal overlay -->
+<div id="settings-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;display:none;align-items:flex-end">
+  <div style="background:var(--bg);border-radius:var(--r-xl) var(--r-xl) 0 0;padding:20px;width:100%;max-width:480px;margin:0 auto;padding-bottom:calc(20px + env(safe-area-inset-bottom))">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="font-size:15px;font-weight:500">Settings</div>
+      <button class="btn round" id="settings-close-btn">✕</button>
+    </div>
+    <div class="field-group" style="margin-bottom:12px">
+      <label class="lbl">Supabase project URL</label>
+      <input class="inp" id="set-url" type="url">
+    </div>
+    <div class="field-group" style="margin-bottom:12px">
+      <label class="lbl">Supabase anon key</label>
+      <input class="inp" id="set-skey" type="password">
+    </div>
+    <div class="field-group" style="margin-bottom:16px">
+      <label class="lbl">Anthropic API key</label>
+      <input class="inp" id="set-akey" type="password">
+    </div>
+    <button class="btn primary full" id="settings-save-btn">Save</button>
+  </div>
+</div>
+
+<input type="file" id="cam-input" accept="image/*" capture="environment" style="display:none">
+<input type="file" id="barcode-cam-input" accept="image/*" capture="environment" style="display:none">
+
+<script>
+'use strict';
+
+// ── Constants ──────────────────────────────────────────────────────────────────
+const DRINKS=[
+  {cat:"Hot drinks",items:[
+    {id:"tea-black",    name:"Tea, black",       kcal:2,   gerd:true,  emoji:"🍵"},
+    {id:"tea-milk",     name:"Tea + milk",       kcal:15,  gerd:true,  emoji:"🍵"},
+    {id:"coffee-black", name:"Coffee, black",    kcal:5,   gerd:true,  emoji:"☕"},
+    {id:"decaf-black",  name:"Decaf, black",     kcal:5,   gerd:false, emoji:"☕"},
+    {id:"decaf-milk",   name:"Decaf + milk",     kcal:15,  gerd:false, emoji:"☕"},
+    {id:"cappuccino",   name:"Cappuccino",       kcal:90,  gerd:true,  emoji:"☕"},
+    {id:"latte",        name:"Latte",            kcal:120, gerd:true,  emoji:"☕"},
+    {id:"oat-latte",    name:"Oat latte",        kcal:110, gerd:true,  emoji:"☕"},
+  ]},
+  {cat:"Cold & soft",items:[
+    {id:"water",        name:"Water",            kcal:0,   gerd:false, emoji:"💧"},
+    {id:"squash",       name:"Squash",           kcal:10,  gerd:false, emoji:"🥤"},
+    {id:"oj",           name:"Orange juice",     kcal:60,  gerd:true,  emoji:"🍊"},
+    {id:"diet-cola",    name:"Diet cola",        kcal:1,   gerd:true,  emoji:"🥤"},
+    {id:"cola",         name:"Cola",             kcal:140, gerd:true,  emoji:"🥤"},
+  ]},
+  {cat:"Alcohol",items:[
+    {id:"beer-pint",    name:"Beer, pint",       kcal:182, gerd:true,  emoji:"🍺"},
+    {id:"beer-half",    name:"Beer, half",       kcal:91,  gerd:true,  emoji:"🍺"},
+    {id:"wine-red",     name:"Red wine 175ml",   kcal:150, gerd:true,  emoji:"🍷"},
+    {id:"wine-white",   name:"White wine 175ml", kcal:131, gerd:true,  emoji:"🥂"},
+    {id:"spirit",       name:"Spirit + mixer",   kcal:110, gerd:true,  emoji:"🥃"},
+  ]},
+];
+
+const SYMPTOMS=[
+  {key:"dysphagia",        label:"Swallowing difficulty",  type:"scale", info:"Effort or discomfort when swallowing"},
+  {key:"foodSticking",     label:"Food sticking",          type:"bool",  info:"Sensation of food catching in throat or chest"},
+  {key:"globus",           label:"Globus (lump in throat)",type:"scale", info:"Persistent feeling of something in the throat"},
+  {key:"throatTenderness", label:"Throat tenderness",      type:"scale", info:"Soreness or sensitivity in the throat"},
+  {key:"chestPain",        label:"Chest pain",             type:"scale", info:"Concentrated pain in the middle of the chest"},
+  {key:"acidTaste",        label:"Acid / bitter taste",    type:"scale", info:"Sour or bitter taste in the mouth"},
+  {key:"stomachRoiling",   label:"Stomach roiling",        type:"scale", info:"Rolling, churning or unsettled stomach feeling"},
+  {key:"nausea",           label:"Nausea",                 type:"scale", info:"Feeling of sickness"},
+  {key:"bloating",         label:"Bloating",               type:"scale", info:"Distension or pressure in abdomen"},
+  {key:"sinuses",          label:"Blocked sinuses",        type:"scale", info:"Congestion, post-nasal drip or sinus pressure"},
+  {key:"bowelSensitivity", label:"Bowel sensitivity",      type:"scale", info:"Discomfort, cramping or unusual sensations"},
+  {key:"urgency",          label:"Bowel urgency",          type:"scale", info:"Sudden strong need to use the toilet"},
+  {key:"mucusInStool",     label:"Mucus in stool",         type:"bool",  info:"Visible mucus when using the toilet"},
+  {key:"stoolType",        label:"Stool type (Bristol)",   type:"bristol",info:"Bristol Stool Scale 1–7"},
+  {key:"tiredness",        label:"Tiredness",              type:"scale", info:"Overall fatigue level"},
+  {key:"earlyWaking",      label:"Woke early",             type:"bool",  info:"Woke significantly before planned time"},
+];
+const SCALE_LABELS=["None","Mild","Moderate","Severe"];
+const BRISTOL_LABELS=["1 – Separate hard lumps","2 – Lumpy sausage","3 – Cracked sausage","4 – Smooth sausage","5 – Soft blobs","6 – Fluffy pieces","7 – Watery"];
+const CHECKIN_TYPES=[{key:"morning",label:"Morning"},{key:"post-meal",label:"After meal"},{key:"evening",label:"Evening"}];
+
+const VISION_SYS=`You are a nutrition analyst for someone with GERD, suspected EoE, and UC history. Return ONLY a JSON object: {description,calories,scale_reference_used,scale_reference_note,ingredients,notes}. UK coin diameters: 1p=20.3mm,2p=25.9mm,5p=18mm,10p=24.5mm,20p=21.4mm,50p=27.3mm,£1=23.4mm,£2=28.4mm. Use any visible coin for scale. Return raw JSON only.`;
+const REVIEW_SYS=`You are a specialist medical data analyst supporting a patient with GERD, suspected eosinophilic oesophagitis (EoE), and a history of ulcerative proctitis (controlled). Analyse their food, drink and symptom diary for patterns to inform clinical care. EoE triggers: dairy, wheat, egg, soy, nuts, seafood, beef, sesame. GERD triggers: high-fat, caffeine, alcohol, citrus, tomatoes, chocolate, mint, spicy food, large meals, eating close to bedtime. Drinks marked [GERD trigger] are relevant for timing correlations with reflux symptoms. Be honest about data quality. Return ONLY this JSON: {"summary","data_quality","symptom_patterns":[{"observation","significance"}],"food_correlations":[{"food_or_ingredient","symptom","evidence","confidence":"possible|moderate|strong"}],"sleep_observations","weight_observations","hypotheses":["string"],"suggestions":[{"action","rationale"}],"questions_for_gp":["string"]}. Raw JSON only.`;
+
+// ── App state ──────────────────────────────────────────────────────────────────
+let db=null;
+let AKEY='';
+
+const todayKey=()=>new Date().toISOString().slice(0,10);
+const timeNow=()=>new Date().toTimeString().slice(0,5);
+const uid=()=>Math.random().toString(36).slice(2,9);
+const EMPTY_DAY=d=>({date:d,meals:[],symptomCheckins:[],sleep:{duration:null,quality:null,wokeEarly:false,bitterTaste:false},weight:null});
+
+let S={
+  tab:"food", dayLog:EMPTY_DAY(todayKey()),
+  showAddMeal:false, newMeal:{description:"",calories:"",notes:"",time:timeNow()},
+  mealPhoto:null, mealFileType:null,
+  visionLoading:false, visionError:"", aiUsed:false, scaleUsed:false, scaleNote:"",
+  showBarcodePanel:false, barcodeInput:"", barcodeLoading:false, barcodeError:"", barcodeProduct:null, barcodeQty:100,
+  listeningField:null,
+  showSymptomForm:false, checkinType:"morning", symptomScores:{}, symptomNotes:"",
+  weightInput:"", sleepDuration:"", sleepQuality:null, sleepWokeEarly:false, sleepBitterTaste:false,
+  drinksOpen:true, lastFlashedDrink:null,
+  history:[], historyLoaded:false, dashRange:14,
+  reviewLoading:false, reviewResult:null, reviewError:"", reviewDays:7,
+  exportStatus:""
+};
+
+let charts={};
+const SpeechRec=window.SpeechRecognition||window.webkitSpeechRecognition;
+let recognition=null;
+
+// ── Supabase helpers ───────────────────────────────────────────────────────────
+async function dbGet(date){
+  try{
+    const{data,error}=await db.from('health_logs').select('data').eq('date',date).maybeSingle();
+    if(error)throw error;
+    return data?.data||null;
+  }catch(e){console.error('dbGet',e);return null;}
+}
+async function dbSet(date,logData){
+  try{
+    const{error}=await db.from('health_logs').upsert({date,data:logData,updated_at:new Date().toISOString()},{onConflict:'date'});
+    if(error)throw error;
+    return true;
+  }catch(e){console.error('dbSet',e);return false;}
+}
+async function dbList(){
+  try{
+    const{data,error}=await db.from('health_logs').select('date,data').order('date');
+    if(error)throw error;
+    return data||[];
+  }catch(e){console.error('dbList',e);return[];}
+}
+
+// ── Credentials ────────────────────────────────────────────────────────────────
+function loadCredentials(){
+  const url=localStorage.getItem('ht_sb_url');
+  const skey=localStorage.getItem('ht_sb_key');
+  const akey=localStorage.getItem('ht_a_key');
+  return{url,skey,akey,ok:!!(url&&skey&&akey)};
+}
+function saveCredentials(url,skey,akey){
+  localStorage.setItem('ht_sb_url',url);
+  localStorage.setItem('ht_sb_key',skey);
+  localStorage.setItem('ht_a_key',akey);
+}
+function initSupabase(url,skey){
+  db=window.supabase.createClient(url,skey);
+}
+
+// ── Setup screen ───────────────────────────────────────────────────────────────
+function showSetup(){
+  document.getElementById('setup').classList.add('visible');
+  document.getElementById('app').classList.remove('visible');
+}
+function showApp(){
+  document.getElementById('setup').classList.remove('visible');
+  document.getElementById('app').classList.add('visible');
+}
+
+document.getElementById('setup-save-btn').addEventListener('click',async()=>{
+  const url=document.getElementById('s-url').value.trim();
+  const skey=document.getElementById('s-key').value.trim();
+  const akey=document.getElementById('a-key').value.trim();
+  const err=document.getElementById('setup-error');
+  if(!url||!skey||!akey){err.textContent='Please fill in all three fields.';err.style.display='block';return;}
+  if(!url.startsWith('https://')){err.textContent='Supabase URL should start with https://';err.style.display='block';return;}
+  if(!akey.startsWith('sk-ant-')){err.textContent='Anthropic API key should start with sk-ant-';err.style.display='block';return;}
+  err.style.display='none';
+  saveCredentials(url,skey,akey);
+  initSupabase(url,skey);
+  AKEY=akey;
+  showApp();
+  await loadDay();
+  renderApp();
+});
+
+// ── Boot ───────────────────────────────────────────────────────────────────────
+async function boot(){
+  const creds=loadCredentials();
+  if(creds.ok){
+    initSupabase(creds.url,creds.skey);
+    AKEY=creds.akey;
+    showApp();
+    await loadDay();
+    renderApp();
+  }else{
+    showSetup();
+  }
+}
+
+// ── Settings modal ─────────────────────────────────────────────────────────────
+document.getElementById('settings-open-btn').addEventListener('click',()=>{
+  const creds=loadCredentials();
+  document.getElementById('set-url').value=creds.url||'';
+  document.getElementById('set-skey').value=creds.skey||'';
+  document.getElementById('set-akey').value=creds.akey||'';
+  document.getElementById('settings-modal').style.display='flex';
+});
+document.getElementById('settings-close-btn').addEventListener('click',()=>{
+  document.getElementById('settings-modal').style.display='none';
+});
+document.getElementById('settings-save-btn').addEventListener('click',()=>{
+  const url=document.getElementById('set-url').value.trim();
+  const skey=document.getElementById('set-skey').value.trim();
+  const akey=document.getElementById('set-akey').value.trim();
+  if(url&&skey&&akey){
+    saveCredentials(url,skey,akey);
+    initSupabase(url,skey);
+    AKEY=akey;
+  }
+  document.getElementById('settings-modal').style.display='none';
+});
+
+// ── Data load/save ─────────────────────────────────────────────────────────────
+async function loadDay(){
+  const d=await dbGet(todayKey());
+  if(d){
+    S.dayLog=d;
+    if(d.weight) S.weightInput=String(d.weight);
+    if(d.sleep?.duration) S.sleepDuration=String(d.sleep.duration);
+    if(d.sleep?.quality) S.sleepQuality=d.sleep.quality;
+    if(d.sleep?.wokeEarly) S.sleepWokeEarly=true;
+    if(d.sleep?.bitterTaste) S.sleepBitterTaste=true;
+  }
+}
+async function saveDay(updated){
+  S.dayLog=updated;
+  const ok=await dbSet(todayKey(),updated);
+  if(ok){
+    const badge=document.getElementById('save-badge');
+    if(badge){badge.style.display='inline';setTimeout(()=>badge.style.display='none',2000);}
+  }
+}
+function setState(patch){Object.assign(S,patch);renderApp();}
+
+// ── Speech ─────────────────────────────────────────────────────────────────────
+function startSpeech(field){
+  if(!SpeechRec){alert('Speech recognition requires Chrome on Android.');return;}
+  if(S.listeningField===field){stopSpeech();return;}
+  stopSpeech();
+  recognition=new SpeechRec();
+  recognition.lang='en-GB';recognition.continuous=false;recognition.interimResults=false;
+  recognition.onresult=e=>{
+    const t=e.results[0][0].transcript;
+    if(field==='desc') S.newMeal.description=(S.newMeal.description+' '+t).trim();
+    if(field==='notes') S.newMeal.notes=(S.newMeal.notes+' '+t).trim();
+    const d=document.getElementById('meal-desc');if(d)d.value=S.newMeal.description;
+    const n=document.getElementById('meal-notes');if(n)n.value=S.newMeal.notes;
+    renderApp();
+  };
+  recognition.onerror=()=>setState({listeningField:null});
+  recognition.onend=()=>setState({listeningField:null});
+  recognition.start();
+  setState({listeningField:field});
+}
+function stopSpeech(){if(recognition){try{recognition.stop();}catch(e){}}recognition=null;}
+
+// ── Drinks ─────────────────────────────────────────────────────────────────────
+function logDrink(drink){
+  const meal={id:uid(),time:timeNow(),description:`${drink.emoji} ${drink.name}`,calories:drink.kcal||null,notes:drink.gerd?'[GERD trigger]':'',isDrink:true,gerdTrigger:drink.gerd};
+  saveDay({...S.dayLog,meals:[...S.dayLog.meals,meal]});
+  setState({lastFlashedDrink:drink.id});
+  setTimeout(()=>setState({lastFlashedDrink:null}),800);
+}
+
+// ── Vision ─────────────────────────────────────────────────────────────────────
+function fileToB64(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(f);});}
+
+async function handlePhoto(file){
+  if(!file)return;
+  const url=URL.createObjectURL(file);
+  const b64=await fileToB64(file);
+  setState({mealPhoto:url,mealFileType:file.type||'image/jpeg',visionLoading:true,visionError:'',aiUsed:false,scaleUsed:false,scaleNote:''});
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,system:VISION_SYS,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:S.mealFileType,data:b64}},{type:'text',text:'Analyse this meal photo. Use any UK coin for scale. Return only the JSON.'}]}]})});
+    const data=await resp.json();
+    const parsed=JSON.parse((data.content?.find(c=>c.type==='text')?.text||'{}').replace(/```json|```/g,'').trim());
+    S.newMeal.description=parsed.description||S.newMeal.description;
+    S.newMeal.calories=parsed.calories?String(parsed.calories):S.newMeal.calories;
+    S.newMeal.notes=parsed.notes||S.newMeal.notes;
+    setState({visionLoading:false,aiUsed:true,scaleUsed:!!parsed.scale_reference_used,scaleNote:parsed.scale_reference_note||''});
+    const d=document.getElementById('meal-desc');if(d)d.value=S.newMeal.description;
+    const n=document.getElementById('meal-notes');if(n)n.value=S.newMeal.notes;
+    const c=document.getElementById('meal-cal');if(c)c.value=S.newMeal.calories;
+  }catch(e){setState({visionLoading:false,visionError:'Could not analyse photo — please fill in manually.'});}
+}
+
+// ── Barcode ────────────────────────────────────────────────────────────────────
+async function scanBarcode(file){
+  if(!file)return;
+  setState({barcodeLoading:true,barcodeError:'',barcodeProduct:null});
+  try{
+    if(!('BarcodeDetector' in window)){setState({barcodeLoading:false,barcodeError:'Barcode scanning requires Chrome on Android. Enter the number manually.'});return;}
+    const img=await createImageBitmap(file);
+    const detector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39']});
+    const barcodes=await detector.detect(img);
+    if(!barcodes.length){setState({barcodeLoading:false,barcodeError:'No barcode detected. Try a clearer photo or enter manually.'});return;}
+    await lookupBarcode(barcodes[0].rawValue);
+  }catch(e){setState({barcodeLoading:false,barcodeError:'Scan failed. Enter the barcode number manually.'});}
+}
+
+async function lookupBarcode(code){
+  if(!code.trim())return;
+  setState({barcodeLoading:true,barcodeError:'',barcodeProduct:null,barcodeInput:code});
+  try{
+    const resp=await fetch(`https://world.openfoodfacts.org/api/v0/product/${code.trim()}.json`);
+    const data=await resp.json();
+    if(data.status!==1||!data.product){setState({barcodeLoading:false,barcodeError:'Product not found. Try entering the name manually.'});return;}
+    const p=data.product;
+    const kcal100=p.nutriments?.['energy-kcal_100g']||p.nutriments?.['energy-kcal']||null;
+    const serving=parseFloat(p.serving_size)||null;
+    setState({barcodeLoading:false,barcodeProduct:{name:p.product_name||'Unknown product',brand:p.brands||'',kcalPer100:kcal100?Math.round(kcal100):null,servingSize:serving,allergens:p.allergens_tags?.map(a=>a.replace('en:',''))||[]},barcodeQty:serving||100});
+  }catch(e){setState({barcodeLoading:false,barcodeError:'Lookup failed. Check your connection.'});}
+}
+
+function applyBarcodeProduct(){
+  const p=S.barcodeProduct;if(!p)return;
+  const qty=S.barcodeQty||100;
+  S.newMeal.description=p.brand?`${p.name} (${p.brand})`:p.name;
+  S.newMeal.calories=p.kcalPer100?String(Math.round(p.kcalPer100*qty/100)):'';
+  S.newMeal.notes=p.allergens.length?`Allergens: ${p.allergens.join(', ')}`:'';
+  setState({showBarcodePanel:false,barcodeProduct:null,barcodeInput:'',barcodeError:''});
+  const d=document.getElementById('meal-desc');if(d)d.value=S.newMeal.description;
+  const n=document.getElementById('meal-notes');if(n)n.value=S.newMeal.notes;
+  const c=document.getElementById('meal-cal');if(c)c.value=S.newMeal.calories;
+}
+
+// ── Meal add/remove ────────────────────────────────────────────────────────────
+function addMeal(){
+  const{description,calories,notes,time}=S.newMeal;
+  if(!description.trim())return;
+  saveDay({...S.dayLog,meals:[...S.dayLog.meals,{id:uid(),time,description,calories:calories?parseInt(calories):null,notes,hasPhoto:!!S.mealPhoto,scaleUsed:S.scaleUsed}]});
+  setState({showAddMeal:false,newMeal:{description:'',calories:'',notes:'',time:timeNow()},mealPhoto:null,mealFileType:null,aiUsed:false,scaleUsed:false,scaleNote:'',visionError:'',showBarcodePanel:false,barcodeProduct:null,barcodeInput:'',barcodeError:''});
+}
+
+// ── Symptom check-in ───────────────────────────────────────────────────────────
+function logCheckin(){
+  const ci={id:uid(),time:timeNow(),type:S.checkinType,scores:{...S.symptomScores},notes:S.symptomNotes};
+  saveDay({...S.dayLog,symptomCheckins:[...S.dayLog.symptomCheckins,ci]});
+  setState({showSymptomForm:false,symptomScores:{},symptomNotes:''});
+}
+
+// ── Sleep / weight ─────────────────────────────────────────────────────────────
+function saveSleepWeight(){
+  saveDay({...S.dayLog,weight:S.weightInput?parseFloat(S.weightInput):null,sleep:{duration:S.sleepDuration?parseFloat(S.sleepDuration):null,quality:S.sleepQuality,wokeEarly:S.sleepWokeEarly,bitterTaste:S.sleepBitterTaste}});
+}
+
+// ── History ────────────────────────────────────────────────────────────────────
+async function loadHistory(){
+  const allRows=await dbList();
+  const days=dateRange(S.dashRange);
+  S.history=days.map(d=>{const row=allRows.find(r=>r.date===d);return row?row.data:EMPTY_DAY(d);});
+  S.historyLoaded=true;
+  renderApp();
+}
+function dateRange(n){const a=[];for(let i=n-1;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);a.push(d.toISOString().slice(0,10));}return a;}
+
+// ── Export ─────────────────────────────────────────────────────────────────────
+async function exportData(){
+  setState({exportStatus:'Exporting…'});
+  const rows=await dbList();
+  rows.sort((a,b)=>a.date.localeCompare(b.date));
+  const obj={exported:new Date().toISOString(),app:'Health Log',note:'Food, drink, symptom and lifestyle diary — GERD / suspected EoE / UC history',total_days_logged:rows.filter(r=>r.data?.meals?.length||r.data?.symptomCheckins?.length||r.data?.weight).length,days:rows.map(r=>r.data)};
+  const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`health-diary-${todayKey()}.json`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  setState({exportStatus:'Exported ✓'});
+  setTimeout(()=>setState({exportStatus:''}),3000);
+}
+
+// ── Weekly review ──────────────────────────────────────────────────────────────
+function formatDiary(history){
+  const lines=['FOOD, DRINK AND SYMPTOM DIARY — LAST '+history.length+' DAYS\n'];
+  history.forEach(day=>{
+    const ok=day.meals?.length||day.symptomCheckins?.length||day.weight||day.sleep?.duration;
+    lines.push('=== '+day.date+(ok?'':' [NO DATA]')+' ===');
+    if(day.weight) lines.push('Weight: '+day.weight+'kg');
+    if(day.sleep?.duration) lines.push('Sleep: '+day.sleep.duration+'h quality:'+(["","Poor","OK","Good"][day.sleep.quality||0])+(day.sleep.wokeEarly?' wokeEarly':'')+(day.sleep.bitterTaste?' acidOnWaking':''));
+    if(day.meals?.length){lines.push('FOOD & DRINK:');day.meals.forEach(m=>lines.push('  '+m.time+' — '+m.description+(m.calories?' ('+m.calories+'kcal)':'')+(m.gerdTrigger?' [GERD trigger]':'')+(m.notes&&!m.gerdTrigger?' ['+m.notes+']':'')+(m.scaleUsed?' [coin-calibrated]':'')));}
+    if(day.symptomCheckins?.length){lines.push('SYMPTOMS:');day.symptomCheckins.forEach(ci=>{const sc=Object.entries(ci.scores).filter(([,v])=>v&&v!==0&&v!==false).map(([k,v])=>{const s=SYMPTOMS.find(x=>x.key===k);return s?s.label+':'+(s.type==='bool'?'yes':s.type==='bristol'?'Bristol'+v:SCALE_LABELS[v]):''}).filter(Boolean).join(', ');lines.push('  '+ci.time+' ('+ci.type+') '+(sc||'all-zero')+(ci.notes?' | '+ci.notes:''));});}
+    lines.push('');
+  });
+  return lines.join('\n');
+}
+
+async function runReview(){
+  setState({reviewLoading:true,reviewResult:null,reviewError:''});
+  const days=dateRange(S.reviewDays);
+  const allRows=await dbList();
+  const history=days.map(d=>{const row=allRows.find(r=>r.date===d);return row?row.data:EMPTY_DAY(d);});
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':AKEY,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,system:REVIEW_SYS,messages:[{role:'user',content:'Analyse this diary and return the JSON.\n\n'+formatDiary(history)}]})});
+    const data=await resp.json();
+    const parsed=JSON.parse((data.content?.find(c=>c.type==='text')?.text||'{}').replace(/```json|```/g,'').trim());
+    setState({reviewLoading:false,reviewResult:parsed});
+  }catch(e){setState({reviewLoading:false,reviewError:'Analysis failed — please try again.'});}
+}
+
+// ── Charts ─────────────────────────────────────────────────────────────────────
+function destroyCharts(){Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}});charts={};}
+function buildCharts(history){
+  destroyCharts();
+  const dark=window.matchMedia?.('(prefers-color-scheme:dark)').matches;
+  const gc=dark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)';
+  const tc=dark?'rgba(255,255,255,0.45)':'rgba(0,0,0,0.4)';
+  const labels=history.map(d=>{const[,m,day]=d.date.split('-');return`${parseInt(day)}/${parseInt(m)}`;});
+  const hasAny=a=>a.some(v=>v!==null&&v!==undefined&&v!==0);
+  const opts=(u,mn,mx)=>({responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y}${u}`}}},scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:10},maxRotation:0}},y:{min:mn,max:mx,grid:{color:gc},ticks:{color:tc,font:{size:10}}}}});
+  const wc=document.getElementById('chart-weight');if(wc){const w=history.map(d=>d.weight);if(hasAny(w))charts.weight=new Chart(wc,{type:'line',data:{labels,datasets:[{data:w,borderColor:'#378ADD',backgroundColor:'rgba(55,138,221,0.07)',pointBackgroundColor:'#378ADD',pointRadius:3,tension:0.3,fill:true,spanGaps:true}]},options:opts(' kg')});}
+  const cc=document.getElementById('chart-calories');if(cc){const c=history.map(d=>(d.meals||[]).reduce((s,m)=>s+(m.calories||0),0));if(hasAny(c))charts.calories=new Chart(cc,{type:'bar',data:{labels,datasets:[{data:c,backgroundColor:c.map(v=>v>2500?'rgba(224,92,92,0.7)':v>0?'rgba(55,138,221,0.65)':'rgba(180,180,180,0.15)'),borderRadius:3,borderSkipped:false}]},options:opts(' kcal',0)});}
+  const sc=document.getElementById('chart-sleep');if(sc){const h=history.map(d=>d.sleep?.duration);if(hasAny(h))charts.sleep=new Chart(sc,{type:'bar',data:{labels,datasets:[{data:h,backgroundColor:h.map(v=>!v?null:v>=7?'rgba(29,158,117,0.65)':v>=5?'rgba(239,159,39,0.65)':'rgba(226,75,74,0.65)'),borderRadius:3,borderSkipped:false,spanGaps:true}]},options:opts('h',0,12)});}
+}
+function avgSymptomScores(history){
+  const t={},c={};
+  history.forEach(day=>(day.symptomCheckins||[]).forEach(ci=>Object.entries(ci.scores).forEach(([k,v])=>{const sym=SYMPTOMS.find(s=>s.key===k);if(!sym||sym.type==='bristol')return;const n=sym.type==='bool'?(v?1:0):v;if(n>0){t[k]=(t[k]||0)+n;c[k]=(c[k]||0)+1;}})));
+  return Object.entries(t).map(([k,val])=>({key:k,avg:val/c[k],label:SYMPTOMS.find(s=>s.key===k)?.label||k})).sort((a,b)=>b.avg-a.avg).slice(0,8);
+}
+
+// ── SVG icons ──────────────────────────────────────────────────────────────────
+const I={
+  mic:(on)=>`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${on?'#721c24':'currentColor'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`,
+  cam:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`,
+  barcode:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5v14M7 5v14M11 5v14M15 5v14M19 5v14M21 5v4M21 15v4M1 5v4M1 15v4"/></svg>`,
+  download:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+  search:`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
+  plus:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+};
+
+// ── HTML builders ──────────────────────────────────────────────────────────────
+function h(tag,attrs,inner){
+  const a=Object.entries(attrs||{}).map(([k,v])=>v===true?k:`${k}="${v}"`).join(' ');
+  return`<${tag}${a?' '+a:''}>${inner||''}</${tag}>`;
+}
+
+function renderDrinksPanel(){
+  let inner='';
+  if(S.drinksOpen){
+    inner=DRINKS.map(cat=>`
+      <div class="drink-cat">${cat.cat}</div>
+      <div class="drink-grid">${cat.items.map(d=>`
+        <button class="drink-btn${S.lastFlashedDrink===d.id?' flashed':''}" id="drink-${d.id}">
+          <span style="font-size:13px">${d.emoji}</span>
+          <span class="d-name">${d.name}</span>
+          ${d.kcal?`<span class="d-kcal">${d.kcal}</span>`:''}
+          ${d.gerd?`<span class="gerd-dot"></span>`:''}
+        </button>`).join('')}
+      </div>`).join('');
+  }
+  return`<div class="panel" style="margin-bottom:13px">
+    <div class="drinks-toggle" id="drinks-toggle">
+      <span style="font-size:12px;font-weight:500;color:var(--text2)">Quick drinks</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:10px;color:var(--text3)">● = GERD trigger</span>
+        <span class="drinks-chevron${S.drinksOpen?' open':''}">▼</span>
+      </div>
+    </div>
+    ${inner}
+  </div>`;
+}
+
+function renderBarcodePanel(){
+  const p=S.barcodeProduct;
+  const calForQty=p?.kcalPer100?Math.round(p.kcalPer100*S.barcodeQty/100):null;
+  return`<div class="barcode-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">
+      <div style="font-size:12px;font-weight:500">Scan or enter barcode</div>
+      <button class="btn" id="close-barcode-btn" style="padding:3px 8px;font-size:11px">✕</button>
+    </div>
+    <button class="btn full" id="scan-barcode-btn" style="margin-bottom:7px;justify-content:center">${I.cam} Scan with camera</button>
+    <div class="inp-row" style="margin-bottom:7px">
+      <input id="barcode-manual" class="inp" placeholder="Or type barcode number…" value="${S.barcodeInput}" style="flex:1">
+      <button class="btn round" id="barcode-lookup-btn">${I.search}</button>
+    </div>
+    ${S.barcodeLoading?`<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);padding:4px 0"><span class="spinner"></span> Looking up…</div>`:''}
+    ${S.barcodeError?`<div class="info-box danger">${S.barcodeError}</div>`:''}
+    ${p?`<div class="product-card">
+      <div style="font-weight:500;font-size:13px;margin-bottom:2px">${p.name}${p.brand?` <span style="font-weight:400;color:var(--text2)">(${p.brand})</span>`:''}</div>
+      ${p.kcalPer100?`<div style="font-size:12px;color:var(--text2);margin-bottom:7px">${p.kcalPer100} kcal per 100g</div>`:`<div style="font-size:12px;color:var(--text2);margin-bottom:7px">Calories not available</div>`}
+      ${p.allergens.length?`<div class="info-box warning" style="margin-bottom:7px">Allergens: ${p.allergens.join(', ')}</div>`:''}
+      ${p.kcalPer100?`<div style="margin-bottom:8px">
+        <label class="lbl">Quantity</label>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input id="barcode-qty" type="number" class="inp" style="width:80px;font-size:15px" value="${Math.round(S.barcodeQty)}">
+          <span style="font-size:12px;color:var(--text2)">g → <strong>${calForQty} kcal</strong></span>
+        </div>
+      </div>`:''}
+      <button class="btn primary full" id="apply-product-btn" style="justify-content:center">Use this product</button>
+    </div>`:''}
+  </div>`;
+}
+
+function renderAddMealForm(){
+  const ld=S.listeningField==='desc', ln=S.listeningField==='notes';
+  return`<div style="padding:13px;border:0.5px solid var(--border2);border-radius:var(--r-lg);margin-top:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:500">Add meal or snack</div>
+      <div style="display:flex;gap:5px">
+        <button class="btn round${S.showBarcodePanel?' active':''}" id="toggle-barcode-btn" style="border-radius:var(--r-md)">${I.barcode}</button>
+        <button class="btn round" id="open-cam-btn" style="border-radius:var(--r-md)">${I.cam}</button>
+      </div>
+    </div>
+    ${S.showBarcodePanel?renderBarcodePanel():''}
+    ${S.mealPhoto?`<div class="photo-wrap">
+      <img src="${S.mealPhoto}" class="photo-preview" alt="meal photo">
+      ${S.visionLoading?`<div class="photo-overlay">Analysing…</div>`:''}
+      <button class="photo-clear" id="clear-photo-btn">×</button>
+    </div>
+    ${S.aiUsed?`<div class="info-box info" style="margin-bottom:7px">Fields pre-filled by AI — review and edit if needed</div>
+    ${S.scaleUsed&&S.scaleNote?`<div class="info-box success" style="margin-bottom:7px">Coin detected — ${S.scaleNote}</div>`:''}
+    ${!S.scaleUsed?`<div class="info-box warning" style="margin-bottom:7px">No coin detected — calorie estimate less precise</div>`:''}`:''}
+    ${S.visionError?`<div class="info-box danger" style="margin-bottom:7px">${S.visionError}</div>`:''}`:''}
+    <div style="margin-bottom:9px">
+      <label class="lbl">What did you eat?</label>
+      <div class="inp-row">
+        <textarea id="meal-desc" class="inp" rows="2" placeholder="e.g. Jacket potato with cheese and beans" style="resize:vertical">${S.newMeal.description}</textarea>
+        <button class="btn round${ld?' listening':''}" id="mic-desc">${I.mic(ld)}</button>
+      </div>
+      ${ld?`<div style="font-size:11px;color:var(--danger-text);margin-top:2px">Listening…</div>`:''}
+    </div>
+    <div class="row" style="margin-bottom:9px">
+      <div><label class="lbl">Calories${S.aiUsed?' (AI)':''}</label><input id="meal-cal" type="number" class="inp" placeholder="e.g. 450" value="${S.newMeal.calories}"></div>
+      <div><label class="lbl">Time</label><input id="meal-time" type="time" class="inp" value="${S.newMeal.time}"></div>
+    </div>
+    <div style="margin-bottom:11px">
+      <label class="lbl">Notes (optional)</label>
+      <div class="inp-row">
+        <input id="meal-notes" class="inp" placeholder="e.g. restaurant meal, felt very full" value="${S.newMeal.notes}">
+        <button class="btn round${ln?' listening':''}" id="mic-notes">${I.mic(ln)}</button>
+      </div>
+      ${ln?`<div style="font-size:11px;color:var(--danger-text);margin-top:2px">Listening…</div>`:''}
+    </div>
+    <div class="row">
+      <button class="btn primary full" id="save-meal-btn" ${S.visionLoading?'disabled':''} style="flex:2;justify-content:center">Save meal</button>
+      <button class="btn full" id="cancel-meal-btn" style="flex:1;justify-content:center">Cancel</button>
+    </div>
+  </div>`;
+}
+
+function renderFoodTab(){
+  const totalCal=S.dayLog.meals.reduce((s,m)=>s+(m.calories||0),0);
+  const mealCards=S.dayLog.meals.map(m=>`
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div class="card-title">${m.description}${m.hasPhoto?`<span class="badge ai">AI</span>`:''} ${m.scaleUsed?`<span class="badge coin">20p</span>`:''}</div>
+        <span style="font-size:11px;color:var(--text2);margin-left:6px;flex-shrink:0">${m.time}</span>
+      </div>
+      ${m.calories?`<div class="card-meta">${m.calories} kcal${m.gerdTrigger?` <span style="color:var(--amber)">● GERD trigger</span>`:''}</div>`:''}
+      ${m.notes&&!m.gerdTrigger?`<div class="card-note">${m.notes}</div>`:''}
+    </div>`).join('');
+
+  return`
+    ${renderDrinksPanel()}
+    ${totalCal>0?`<div style="margin-bottom:12px;padding:10px 13px;background:var(--bg2);border-radius:var(--r-md);display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:var(--text2)">Calories today</span><span style="font-size:18px;font-weight:600">${totalCal.toLocaleString()} kcal</span></div>`:''}
+    ${S.dayLog.meals.length===0?`<div class="empty">No meals or drinks logged yet today</div>`:mealCards}
+    ${S.showAddMeal?renderAddMealForm():`<button class="btn dashed" id="add-meal-btn">${I.plus} Add meal or snack</button>`}`;
+}
+
+function renderSymptomsTab(){
+  const checkinCards=S.dayLog.symptomCheckins.map(ci=>{
+    const notable=Object.entries(ci.scores).filter(([,v])=>v!==undefined&&v!==0&&v!==false&&v!==null);
+    return`<div class="card">
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+        <span style="font-weight:500;font-size:13px;text-transform:capitalize">${ci.type} check-in</span>
+        <span style="font-size:11px;color:var(--text2)">${ci.time}</span>
+      </div>
+      ${notable.length===0?`<div class="card-meta">All symptoms at zero / none</div>`:''}
+      ${notable.map(([k,v])=>{const sym=SYMPTOMS.find(s=>s.key===k);if(!sym)return'';const display=sym.type==='bool'?'Yes':sym.type==='bristol'?`Type ${v}`:SCALE_LABELS[v];return`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span style="color:var(--text2)">${sym.label}</span><span style="font-weight:500">${display}</span></div>`;}).join('')}
+      ${ci.notes?`<div class="card-note">${ci.notes}</div>`:''}
+    </div>`;}).join('');
+
+  let form='';
+  if(S.showSymptomForm){
+    const rows=SYMPTOMS.map(sym=>{
+      let inp='';
+      if(sym.type==='scale') inp=`<div class="scale-row">${SCALE_LABELS.map((lbl,i)=>`<button class="scale-btn${S.symptomScores[sym.key]===i?' s'+i:''}" id="sc-${sym.key}-${i}">${i}<br><span style="font-size:10px">${lbl}</span></button>`).join('')}</div>`;
+      else if(sym.type==='bool') inp=`<div class="row" style="margin-top:5px;gap:6px">${['No','Yes'].map((lbl,i)=>`<button class="btn${S.symptomScores[sym.key]===(i===1)?' active':''}" id="sc-${sym.key}-${i}" style="flex:1;justify-content:center;padding:7px">${lbl}</button>`).join('')}</div>`;
+      else if(sym.type==='bristol') inp=`<select id="sc-${sym.key}" class="inp" style="margin-top:5px"><option value="">Select stool type…</option>${BRISTOL_LABELS.map((l,i)=>`<option value="${i+1}" ${S.symptomScores[sym.key]===i+1?'selected':''}>${l}</option>`).join('')}</select>`;
+      return`<div style="margin-bottom:13px"><div style="font-size:12px;font-weight:500">${sym.label}</div><div style="font-size:11px;color:var(--text2);margin-top:1px">${sym.info}</div>${inp}</div>`;
+    }).join('');
+    form=`<div style="margin-top:4px">
+      <div style="font-size:13px;font-weight:500;margin-bottom:12px">${CHECKIN_TYPES.find(c=>c.key===S.checkinType)?.label} check-in <span style="font-weight:400;color:var(--text2)">— tap to score each</span></div>
+      ${rows}
+      <div style="margin-bottom:12px"><label class="lbl">Notes</label><textarea id="sym-notes" class="inp" rows="2" placeholder="Anything else worth noting…" style="resize:vertical">${S.symptomNotes}</textarea></div>
+      <div class="row">
+        <button class="btn primary full" id="save-ci-btn" style="flex:2;justify-content:center">Save check-in</button>
+        <button class="btn full" id="cancel-ci-btn" style="flex:1;justify-content:center">Cancel</button>
+      </div>
+    </div>`;
+  }else{
+    const typeBtns=CHECKIN_TYPES.map(ct=>`<button class="btn${S.checkinType===ct.key?' active':''}" id="ctype-${ct.key}" style="flex:1;justify-content:center;padding:7px 4px">${ct.label}</button>`).join('');
+    form=`<div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:7px;margin-top:4px">Check-in type:</div>
+      <div class="row" style="margin-bottom:10px;gap:6px">${typeBtns}</div>
+      <button class="btn dashed" id="start-ci-btn">${I.plus} Record ${CHECKIN_TYPES.find(c=>c.key===S.checkinType)?.label.toLowerCase()} check-in</button>
+    </div>`;
+  }
+  return`${S.dayLog.symptomCheckins.length===0?`<div class="empty">No check-ins recorded today</div>`:checkinCards}${form}`;
+}
+
+function renderSleepTab(){
+  const sl=S.dayLog.sleep;
+  return`
+    <div style="margin-bottom:20px">
+      <div style="font-size:13px;font-weight:500;margin-bottom:10px">Weight</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input id="weight-input" type="number" step="0.1" class="inp" style="flex:1;font-size:16px" placeholder="e.g. 94.5" value="${S.weightInput}">
+        <span style="font-size:13px;color:var(--text2)">kg</span>
+      </div>
+    </div>
+    <div style="border-top:0.5px solid var(--border);padding-top:20px;margin-bottom:20px">
+      <div style="font-size:13px;font-weight:500;margin-bottom:11px">Last night's sleep</div>
+      <div style="margin-bottom:12px">
+        <label class="lbl">Hours slept</label>
+        <input id="sleep-dur" type="number" step="0.5" min="0" max="24" class="inp" style="font-size:16px" placeholder="e.g. 6.5" value="${S.sleepDuration}">
+      </div>
+      <div style="margin-bottom:12px">
+        <label class="lbl">Sleep quality</label>
+        <div class="qual-row">
+          ${[['1','Poor'],['2','OK'],['3','Good']].map(([v,l])=>`<button class="qual-btn${S.sleepQuality===parseInt(v)?' active':''}" id="sq-${v}">${l}</button>`).join('')}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
+          <input type="checkbox" id="woke-early" ${S.sleepWokeEarly?'checked':''} style="margin-top:2px;flex-shrink:0">
+          <span style="font-size:13px">Woke significantly early and couldn't get back to sleep</span>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
+          <input type="checkbox" id="bitter-taste" ${S.sleepBitterTaste?'checked':''} style="margin-top:2px;flex-shrink:0">
+          <span style="font-size:13px">Woke with bitter/acid taste or reflux cough</span>
+        </label>
+      </div>
+    </div>
+    <button class="btn primary full" id="save-sw-btn" style="padding:12px;font-size:14px;justify-content:center">Save</button>
+    ${S.dayLog.weight||sl?.duration?`<div style="margin-top:12px;padding:11px 13px;background:var(--bg2);border-radius:var(--r-md);font-size:13px">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:3px">Recorded today</div>
+      ${S.dayLog.weight?`Weight: <strong>${S.dayLog.weight} kg</strong>  `:''}
+      ${sl?.duration?`Sleep: <strong>${sl.duration}h</strong>  `:''}
+      ${sl?.quality?`Quality: <strong>${['','Poor','OK','Good'][sl.quality]}</strong>`:''}
+    </div>`:''}`;
+}
+
+function renderReview(r){
+  if(!r)return'';
+  const badge=c=>`<span class="conf ${c}">${c}</span>`;
+  const parts=[];
+  parts.push(`<div class="review-section" style="border-color:#bee5eb;background:var(--info-bg)"><div class="review-title" style="color:var(--info-text)">Summary</div><div style="font-size:13px;line-height:1.6">${r.summary}</div>${r.data_quality?`<div style="font-size:11px;color:var(--text2);margin-top:7px;font-style:italic">${r.data_quality}</div>`:''}</div>`);
+  if(r.symptom_patterns?.length) parts.push(`<div class="review-section"><div class="review-title">Symptom patterns</div>${r.symptom_patterns.map(p=>`<div class="review-item"><div style="font-weight:500;margin-bottom:2px">${p.observation}</div><div style="font-size:12px;color:var(--text2)">${p.significance}</div></div>`).join('')}</div>`);
+  if(r.food_correlations?.length) parts.push(`<div class="review-section"><div class="review-title">Food & drink correlations</div>${r.food_correlations.map(c=>`<div class="review-item"><div style="font-weight:500;margin-bottom:2px">${c.food_or_ingredient} → ${c.symptom}${badge(c.confidence)}</div><div style="font-size:12px;color:var(--text2)">${c.evidence}</div></div>`).join('')}</div>`);
+  if(r.sleep_observations||r.weight_observations) parts.push(`<div class="review-section"><div class="review-title">Lifestyle observations</div>${r.sleep_observations?`<div class="review-item"><strong>Sleep: </strong>${r.sleep_observations}</div>`:''} ${r.weight_observations?`<div class="review-item"><strong>Weight: </strong>${r.weight_observations}</div>`:''}</div>`);
+  if(r.hypotheses?.length) parts.push(`<div class="review-section"><div class="review-title">Hypotheses to investigate</div>${r.hypotheses.map(h=>`<div class="review-item">${h}</div>`).join('')}</div>`);
+  if(r.suggestions?.length) parts.push(`<div class="review-section"><div class="review-title">Suggestions for the coming week</div>${r.suggestions.map(s=>`<div class="review-item"><div style="font-weight:500;margin-bottom:2px">${s.action}</div><div style="font-size:12px;color:var(--text2)">${s.rationale}</div></div>`).join('')}</div>`);
+  if(r.questions_for_gp?.length) parts.push(`<div class="review-section" style="border-color:#ffeeba;background:var(--warning-bg)"><div class="review-title" style="color:var(--warning-text)">Questions for your doctor</div>${r.questions_for_gp.map(q=>`<div class="review-item">${q}</div>`).join('')}</div>`);
+  return parts.join('');
+}
+
+function renderDashboard(){
+  if(!S.historyLoaded) return`<div class="empty">Loading history…</div>`;
+  const history=S.history;
+  const hasData=history.some(d=>d.meals?.length||d.symptomCheckins?.length||d.weight);
+  const ww=history.filter(d=>d.weight); const avgW=ww.length?ww.reduce((s,d)=>s+d.weight,0)/ww.length:null;
+  const ws=history.filter(d=>d.sleep?.duration); const avgS=ws.length?ws.reduce((s,d)=>s+d.sleep.duration,0)/ws.length:null;
+  const wc=history.filter(d=>d.meals?.some(m=>m.calories)); const avgC=wc.length?wc.reduce((s,d)=>s+(d.meals||[]).reduce((a,m)=>a+(m.calories||0),0),0)/wc.length:null;
+  const symAvgs=avgSymptomScores(history);
+  const cards=[
+    avgW?`<div class="stat-card"><div class="s-label">Avg weight</div><div class="s-value">${avgW.toFixed(1)}<span class="s-unit">kg</span></div></div>`:'',
+    avgS?`<div class="stat-card"><div class="s-label">Avg sleep</div><div class="s-value">${avgS.toFixed(1)}<span class="s-unit">h</span></div></div>`:'',
+    avgC?`<div class="stat-card"><div class="s-label">Avg calories</div><div class="s-value" style="font-size:16px">${Math.round(avgC).toLocaleString()}<span class="s-unit">kcal</span></div></div>`:'',
+    symAvgs[0]?`<div class="stat-card"><div class="s-label">Top symptom</div><div class="s-value" style="font-size:12px;line-height:1.3;margin-top:2px">${symAvgs[0].label}</div></div>`:'',
+  ].filter(Boolean).join('');
+  const symRows=symAvgs.map(s=>{const mp=SYMPTOMS.find(x=>x.key===s.key)?.type==='bool'?1:3;const pct=Math.round((s.avg/mp)*100);const col=s.avg>=2?'#e24b4a':s.avg>=1?'#ef9f27':'#1d9e75';return`<div class="sym-row"><div class="sym-name">${s.label}</div><div class="sym-bar-bg"><div class="sym-bar-fill" style="width:${pct}%;background:${col}"></div></div><div class="sym-score" style="color:${col}">${s.avg.toFixed(1)}</div></div>`;}).join('');
+  const showW=history.some(d=>d.weight); const showC=history.some(d=>d.meals?.some(m=>m.calories)); const showS=history.some(d=>d.sleep?.duration);
+
+  return`
+    ${!hasData?`<div class="empty" style="padding-bottom:0">No history yet — start logging to see trends here.</div>`:`
+      ${cards?`<div class="stat-grid">${cards}</div>`:''}
+      <div class="row" style="margin-bottom:14px">
+        ${[7,14].map(n=>`<button class="btn${S.dashRange===n?' active':''}" id="range-${n}" style="flex:1;justify-content:center;padding:7px;font-size:12px">${n} days</button>`).join('')}
+      </div>
+      ${showW?`<div class="chart-section"><div class="chart-title">Weight (kg)</div><div class="chart-wrap"><canvas id="chart-weight"></canvas></div></div>`:''}
+      ${showC?`<div class="chart-section"><div class="chart-title">Daily calories (kcal)</div><div class="chart-wrap"><canvas id="chart-calories"></canvas></div></div>`:''}
+      ${showS?`<div class="chart-section"><div class="chart-title">Sleep (hours)</div><div class="chart-wrap"><canvas id="chart-sleep"></canvas></div></div>`:''}
+      ${symRows?`<div class="chart-section"><div class="chart-title">Average symptom severity</div><div style="font-size:11px;color:var(--text2);margin-bottom:9px">Mean score across all check-ins in range (0–3)</div>${symRows}</div>`:''}
+    `}
+    <hr class="divider">
+    <div style="margin-bottom:4px">
+      <div style="font-size:13px;font-weight:500;margin-bottom:4px">Export your data</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:11px">Download all your logged data as a JSON file to share with your doctor or keep as a backup.</div>
+      <button class="cta-btn" id="export-btn" ${S.exportStatus==='Exporting…'?'disabled':''}>
+        ${S.exportStatus==='Exporting…'?`<span class="spinner"></span> Exporting…`:`${I.download} Download diary (JSON)`}
+      </button>
+      ${S.exportStatus&&S.exportStatus!=='Exporting…'?`<div style="font-size:12px;text-align:center;color:${S.exportStatus.includes('✓')?'var(--success-text)':'var(--danger-text)'}">${S.exportStatus}</div>`:''}
+    </div>
+    <hr class="divider">
+    <div>
+      <div style="font-size:13px;font-weight:500;margin-bottom:4px">Weekly AI review</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:9px">Analyses your diary for patterns and suggestions to discuss with your doctor.</div>
+      <div class="row" style="margin-bottom:9px;gap:6px">
+        ${[7,14].map(n=>`<button class="btn${S.reviewDays===n?' active':''}" id="rev-range-${n}" style="flex:1;justify-content:center;padding:6px;font-size:12px">${n} days</button>`).join('')}
+      </div>
+      <button class="cta-btn" id="run-review-btn" ${S.reviewLoading?'disabled':''}>
+        ${S.reviewLoading?`<span class="spinner"></span> Analysing your data…`:`${I.search} Run ${S.reviewDays}-day review`}
+      </button>
+      ${S.reviewError?`<div class="info-box danger" style="margin-bottom:9px">${S.reviewError}</div>`:''}
+      ${S.reviewResult?renderReview(S.reviewResult):''}
+    </div>`;
+}
+
+// ── Main render ────────────────────────────────────────────────────────────────
+function renderApp(){
+  const date=new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
+  document.getElementById('app-date').textContent=date;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===S.tab));
+  destroyCharts();
+  const content=document.getElementById('tab-content');
+  if(!content)return;
+  switch(S.tab){
+    case 'food': content.innerHTML=renderFoodTab(); break;
+    case 'symptoms': content.innerHTML=renderSymptomsTab(); break;
+    case 'sleep': content.innerHTML=renderSleepTab(); break;
+    case 'dashboard': content.innerHTML=renderDashboard(); break;
+  }
+  if(S.tab==='dashboard'&&S.historyLoaded){
+    requestAnimationFrame(()=>buildCharts(S.history));
+  }
+  bindEvents();
+}
+
+// ── Event binding ──────────────────────────────────────────────────────────────
+function on(id,ev,fn){const el=document.getElementById(id);if(el)el.addEventListener(ev,fn);}
+
+function bindEvents(){
+  // Tabs
+  document.querySelectorAll('.tab-btn').forEach(b=>b.addEventListener('click',()=>{
+    stopSpeech();
+    const t=b.dataset.tab;
+    const sw=t==='dashboard'&&!S.historyLoaded;
+    Object.assign(S,{tab:t,showAddMeal:false,showSymptomForm:false,listeningField:null});
+    if(sw) loadHistory(); else renderApp();
+  }));
+
+  // Drinks
+  on('drinks-toggle','click',()=>setState({drinksOpen:!S.drinksOpen}));
+  DRINKS.forEach(cat=>cat.items.forEach(d=>on('drink-'+d.id,'click',()=>logDrink(d))));
+
+  // Food
+  on('add-meal-btn','click',()=>setState({showAddMeal:true}));
+  on('cancel-meal-btn','click',()=>{stopSpeech();setState({showAddMeal:false,newMeal:{description:'',calories:'',notes:'',time:timeNow()},mealPhoto:null,mealFileType:null,aiUsed:false,scaleUsed:false,scaleNote:'',visionError:'',showBarcodePanel:false,barcodeProduct:null,barcodeInput:'',barcodeError:'',listeningField:null});});
+  on('save-meal-btn','click',()=>{
+    S.newMeal.description=document.getElementById('meal-desc')?.value||'';
+    S.newMeal.calories=document.getElementById('meal-cal')?.value||'';
+    S.newMeal.notes=document.getElementById('meal-notes')?.value||'';
+    S.newMeal.time=document.getElementById('meal-time')?.value||timeNow();
+    addMeal();
+  });
+  ['meal-desc','meal-cal','meal-notes','meal-time'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.addEventListener('input',e=>{const k={'meal-desc':'description','meal-cal':'calories','meal-notes':'notes','meal-time':'time'}[id];S.newMeal[k]=e.target.value;});
+  });
+  on('mic-desc','click',()=>startSpeech('desc'));
+  on('mic-notes','click',()=>startSpeech('notes'));
+  on('open-cam-btn','click',()=>{const c=document.getElementById('cam-input');if(c){c.value='';c.click();}});
+  on('clear-photo-btn','click',()=>setState({mealPhoto:null,mealFileType:null,aiUsed:false,scaleUsed:false,scaleNote:'',visionError:''}));
+
+  // Camera inputs
+  const ci=document.getElementById('cam-input');
+  if(ci&&!ci._b){ci._b=true;ci.addEventListener('change',e=>{if(e.target.files[0])handlePhoto(e.target.files[0]);});}
+  const bi=document.getElementById('barcode-cam-input');
+  if(bi&&!bi._b){bi._b=true;bi.addEventListener('change',e=>{if(e.target.files[0])scanBarcode(e.target.files[0]);});}
+
+  // Barcode
+  on('toggle-barcode-btn','click',()=>setState({showBarcodePanel:!S.showBarcodePanel,barcodeProduct:null,barcodeInput:'',barcodeError:''}));
+  on('close-barcode-btn','click',()=>setState({showBarcodePanel:false,barcodeProduct:null,barcodeInput:'',barcodeError:''}));
+  on('scan-barcode-btn','click',()=>{const c=document.getElementById('barcode-cam-input');if(c){c.value='';c.click();}});
+  on('barcode-lookup-btn','click',()=>{const v=document.getElementById('barcode-manual')?.value;if(v)lookupBarcode(v);});
+  on('barcode-manual','keydown',e=>{if(e.key==='Enter'){const v=e.target.value;if(v)lookupBarcode(v);}});
+  on('barcode-manual','input',e=>S.barcodeInput=e.target.value);
+  on('barcode-qty','input',e=>{S.barcodeQty=parseFloat(e.target.value)||100;renderApp();});
+  on('apply-product-btn','click',applyBarcodeProduct);
+
+  // Symptoms
+  CHECKIN_TYPES.forEach(ct=>on('ctype-'+ct.key,'click',()=>setState({checkinType:ct.key})));
+  on('start-ci-btn','click',()=>setState({showSymptomForm:true,symptomScores:{},symptomNotes:''}));
+  on('cancel-ci-btn','click',()=>setState({showSymptomForm:false,symptomScores:{},symptomNotes:''}));
+  on('save-ci-btn','click',()=>{const n=document.getElementById('sym-notes');if(n)S.symptomNotes=n.value;logCheckin();});
+  on('sym-notes','input',e=>S.symptomNotes=e.target.value);
+  SYMPTOMS.forEach(sym=>{
+    if(sym.type==='scale')[0,1,2,3].forEach(i=>on(`sc-${sym.key}-${i}`,'click',()=>{S.symptomScores[sym.key]=i;renderApp();}));
+    else if(sym.type==='bool')[0,1].forEach(i=>on(`sc-${sym.key}-${i}`,'click',()=>{S.symptomScores[sym.key]=i===1;renderApp();}));
+    else if(sym.type==='bristol'){const el=document.getElementById(`sc-${sym.key}`);if(el)el.addEventListener('change',e=>{S.symptomScores[sym.key]=e.target.value?parseInt(e.target.value):null;});}
+  });
+
+  // Sleep / weight
+  [['1'],['2'],['3']].forEach(([v])=>on('sq-'+v,'click',()=>setState({sleepQuality:parseInt(v)})));
+  on('weight-input','input',e=>S.weightInput=e.target.value);
+  on('sleep-dur','input',e=>S.sleepDuration=e.target.value);
+  on('woke-early','change',e=>S.sleepWokeEarly=e.target.checked);
+  on('bitter-taste','change',e=>S.sleepBitterTaste=e.target.checked);
+  on('save-sw-btn','click',saveSleepWeight);
+
+  // Dashboard
+  on('range-7','click',()=>{S.dashRange=7;S.historyLoaded=false;loadHistory();});
+  on('range-14','click',()=>{S.dashRange=14;S.historyLoaded=false;loadHistory();});
+  on('rev-range-7','click',()=>setState({reviewDays:7}));
+  on('rev-range-14','click',()=>setState({reviewDays:14}));
+  on('run-review-btn','click',runReview);
+  on('export-btn','click',exportData);
+}
+
+// ── Start ──────────────────────────────────────────────────────────────────────
+boot();
+</script>
+</body>
+</html>
