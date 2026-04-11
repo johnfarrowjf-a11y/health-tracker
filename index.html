@@ -458,21 +458,42 @@ function updateCalPill(){
 }
 
 async function estimateCals(){
-  const desc=document.getElementById('meal-desc')?.value?.trim();
-  if(!desc){alert('Please describe the meal first.');return;}
+  // Sync description from DOM into state before reading
+  const descEl=document.getElementById('meal-desc');
+  if(descEl) S.nm.description=descEl.value;
+  const desc=S.nm.description.trim();
+  if(!desc){alert('Please describe the meal first, then tap Estimate.');return;}
   const btn=document.getElementById('est-cal-btn');
-  if(btn){btn.disabled=true;btn.textContent='Estimating…';}
+  if(btn){btn.disabled=true;btn.innerHTML='Working...';}
   try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':AK,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:200,messages:[{role:'user',content:`Estimate the total calories for this meal: "${desc}". Assume a typical UK portion size unless the description specifies amounts. Reply with ONLY a single integer — the calorie number, nothing else.`}]})});
+    const r=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':AK,'anthropic-version':'2023-06-01'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:100,
+        messages:[{role:'user',content:'Estimate the total calories for this meal or drink: "'+desc+'". Assume a typical UK adult portion size unless amounts are stated. Reply with ONLY a single whole number with no words, no units, just the number.'}]
+      })
+    });
     const data=await r.json();
     const raw=(data.content?.find(c=>c.type==='text')?.text||'').trim();
     const cal=parseInt(raw.replace(/[^0-9]/g,''));
     if(cal&&cal>0){
       S.nm.calories=String(cal);
-      const inp=document.getElementById('meal-cal');if(inp)inp.value=cal;
+      const inp=document.getElementById('meal-cal');
+      if(inp){
+        inp.value=cal;
+        inp.style.transition='background 0.3s';
+        inp.style.background='var(--success-bg)';
+        setTimeout(()=>{inp.style.background='';},1800);
+      }
+    }else{
+      alert('Could not parse a calorie estimate. Try describing the meal in more detail.');
     }
-  }catch(e){}
-  if(btn){btn.disabled=false;btn.innerHTML=`${I.sr} Estimate`;}
+  }catch(e){
+    alert('Estimation failed - check your connection and try again.');
+  }
+  if(btn){btn.disabled=false;btn.innerHTML=I.sr+' Estimate';}
 }
 
 function dr(n){const a=[];for(let i=n-1;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);a.push(d.toISOString().slice(0,10));}return a;}
