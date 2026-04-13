@@ -398,7 +398,7 @@ async function handlePhoto(file){
   const url=URL.createObjectURL(file),b64=await f2b(file);
   ss({photo:url,pType:file.type||'image/jpeg',vLoad:true,vErr:'',aiUsed:false,scUsed:false,scNote:''});
   try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':AK,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,system:VS,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:S.pType,data:b64}},{type:'text',text:'Analyse this meal photo. Use any UK coin for scale. Return only the JSON.'}]}]})});
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':AK,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,system:VS,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:S.pType,data:b64}},{type:'text',text:'Analyse this meal photo. Use any UK coin for scale. Return only the JSON.'}]}]})});
     const data=await r.json();
     const p=JSON.parse((data.content?.find(c=>c.type==='text')?.text||'{}').replace(/```json|```/g,'').trim());
     S.nm.description=p.description||S.nm.description;S.nm.calories=p.calories?String(p.calories):S.nm.calories;S.nm.notes=p.notes||S.nm.notes;
@@ -468,7 +468,7 @@ async function estimateCals(){
   try{
     const r=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':AK,'anthropic-version':'2023-06-01'},
+      headers:{'Content-Type':'application/json','x-api-key':AK,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
       body:JSON.stringify({
         model:'claude-sonnet-4-20250514',
         max_tokens:100,
@@ -531,7 +531,7 @@ async function runReview(){
   const rows=await dbL();const days=dr(S.revDays);
   const hist=days.map(d=>{const row=rows.find(r=>r.date===d);const day=row?row.data:ED(d);if(!day.bowelMovements)day.bowelMovements=[];return day;});
   try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':AK,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2500,system:RS,messages:[{role:'user',content:'Analyse this diary and return the JSON.\n\n'+fmtDiary(hist)}]})});
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':AK,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2500,system:RS,messages:[{role:'user',content:'Analyse this diary and return the JSON.\n\n'+fmtDiary(hist)}]})});
     const data=await r.json();
     const parsed=JSON.parse((data.content?.find(c=>c.type==='text')?.text||'{}').replace(/```json|```/g,'').trim());
     ss({revLoad:false,revRes:parsed});
