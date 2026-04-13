@@ -368,6 +368,14 @@ async function boot(){
 async function loadDay(){
   const d=await dbG(dk());
   if(d){if(!d.bowelMovements)d.bowelMovements=[];S.dayLog=d;if(d.weight)S.wIn=String(d.weight);if(d.sleep?.duration)S.slDur=String(d.sleep.duration);if(d.sleep?.quality)S.slQ=d.sleep.quality;if(d.sleep?.wokeEarly)S.slWE=true;if(d.sleep?.bitterTaste)S.slBT=true;}
+  // Restore meal form if Android killed tab while camera was open
+  if(sessionStorage.getItem('ht_cam_pending')==='1'){
+    try{const saved=sessionStorage.getItem('ht_cam_nm');if(saved)S.nm=JSON.parse(saved);}catch(e){}
+    S.showAddMeal=true;S.tab='food';
+    sessionStorage.removeItem('ht_cam_pending');
+    sessionStorage.removeItem('ht_cam_nm');
+    sessionStorage.removeItem('ht_cam_photo');
+  }
 }
 async function saveDay(u){
   S.dayLog=u;const ok=await dbS(dk(),u);
@@ -395,16 +403,47 @@ function logDrink(d){
 function f2b(f){return new Promise((r,j)=>{const x=new FileReader();x.onload=()=>r(x.result.split(',')[1]);x.onerror=j;x.readAsDataURL(f);});}
 async function handlePhoto(file){
   if(!file)return;
+  if(!AK){ss({vLoad:false,vErr:'Anthropic API key not set — check Settings.'});return;}
   const url=URL.createObjectURL(file),b64=await f2b(file);
   ss({photo:url,pType:file.type||'image/jpeg',vLoad:true,vErr:'',aiUsed:false,scUsed:false,scNote:''});
   try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':AK,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,system:VS,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:S.pType,data:b64}},{type:'text',text:'Analyse this meal photo. Use any UK coin for scale. Return only the JSON.'}]}]})});
+    const r=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'x-api-key':AK,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
+      body:JSON.stringify({
+        model:'claude-sonnet-4-6',
+        max_tokens:800,
+        system:VS,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:S.pType||'image/jpeg',data:b64}},
+          {type:'text',text:'Analyse this meal photo. Use any UK coin for scale. Return only the JSON.'}
+        ]}]
+      })
+    });
     const data=await r.json();
-    const p=JSON.parse((data.content?.find(c=>c.type==='text')?.text||'{}').replace(/```json|```/g,'').trim());
-    S.nm.description=p.description||S.nm.description;S.nm.calories=p.calories?String(p.calories):S.nm.calories;S.nm.notes=p.notes||S.nm.notes;
+    if(!r.ok||data.error){
+      const msg=data.error?.message||('API error '+r.status);
+      ss({vLoad:false,vErr:'API error: '+msg});
+      return;
+    }
+    const raw=(data.content?.find(c=>c.type==='text')?.text||'{}').replace(/```json|```/g,'').trim();
+    const p=JSON.parse(raw);
+    S.nm.description=p.description||S.nm.description;
+    S.nm.calories=p.calories?String(p.calories):S.nm.calories;
+    S.nm.notes=p.notes||S.nm.notes;
     ss({vLoad:false,aiUsed:true,scUsed:!!p.scale_reference_used,scNote:p.scale_reference_note||''});
-    const d=document.getElementById('meal-desc');if(d)d.value=S.nm.description;const n=document.getElementById('meal-notes');if(n)n.value=S.nm.notes;const c=document.getElementById('meal-cal');if(c)c.value=S.nm.calories;
-  }catch(e){ss({vLoad:false,vErr:'Could not analyse photo — please fill in manually.'});}
+    const d=document.getElementById('meal-desc');if(d)d.value=S.nm.description;
+    const n=document.getElementById('meal-notes');if(n)n.value=S.nm.notes;
+    const c=document.getElementById('meal-cal');if(c)c.value=S.nm.calories;
+    sessionStorage.removeItem('ht_cam_pending');
+  }catch(e){
+    ss({vLoad:false,vErr:'Photo analysis failed: '+e.message});
+  }
 }
 
 async function scanBC(file){
@@ -458,11 +497,11 @@ function updateCalPill(){
 }
 
 async function estimateCals(){
-  // Sync description from DOM into state before reading
   const descEl=document.getElementById('meal-desc');
   if(descEl) S.nm.description=descEl.value;
   const desc=S.nm.description.trim();
   if(!desc){alert('Please describe the meal first, then tap Estimate.');return;}
+  if(!AK){alert('Anthropic API key not set — check Settings.');return;}
   const btn=document.getElementById('est-cal-btn');
   if(btn){btn.disabled=true;btn.innerHTML='Working...';}
   try{
@@ -470,12 +509,16 @@ async function estimateCals(){
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':AK,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
       body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
+        model:'claude-sonnet-4-6',
         max_tokens:100,
         messages:[{role:'user',content:'Estimate the total calories for this meal or drink: "'+desc+'". Assume a typical UK adult portion size unless amounts are stated. Reply with ONLY a single whole number with no words, no units, just the number.'}]
       })
     });
     const data=await r.json();
+    if(!r.ok||data.error){
+      const msg=data.error?.message||('API error '+r.status);
+      alert('API error: '+msg);
+    }else{
     const raw=(data.content?.find(c=>c.type==='text')?.text||'').trim();
     const cal=parseInt(raw.replace(/[^0-9]/g,''));
     if(cal&&cal>0){
@@ -488,10 +531,11 @@ async function estimateCals(){
         setTimeout(()=>{inp.style.background='';},1800);
       }
     }else{
-      alert('Could not parse a calorie estimate. Try describing the meal in more detail.');
+      alert('Could not parse a calorie estimate. Try describing in more detail.');
     }
+    } // end r.ok check
   }catch(e){
-    alert('Estimation failed - check your connection and try again.');
+    alert('Estimation failed: '+e.message);
   }
   if(btn){btn.disabled=false;btn.innerHTML=I.sr+' Estimate';}
 }
@@ -531,11 +575,16 @@ async function runReview(){
   const rows=await dbL();const days=dr(S.revDays);
   const hist=days.map(d=>{const row=rows.find(r=>r.date===d);const day=row?row.data:ED(d);if(!day.bowelMovements)day.bowelMovements=[];return day;});
   try{
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':AK,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2500,system:RS,messages:[{role:'user',content:'Analyse this diary and return the JSON.\n\n'+fmtDiary(hist)}]})});
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':AK,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:2500,system:RS,messages:[{role:'user',content:'Analyse this diary and return the JSON.\n\n'+fmtDiary(hist)}]})});
     const data=await r.json();
+    if(!r.ok||data.error){
+      const msg=data.error?.message||('API error '+r.status);
+      ss({revLoad:false,revErr:'API error: '+msg});
+      return;
+    }
     const parsed=JSON.parse((data.content?.find(c=>c.type==='text')?.text||'{}').replace(/```json|```/g,'').trim());
     ss({revLoad:false,revRes:parsed});
-  }catch(e){ss({revLoad:false,revErr:'Analysis failed — please try again.'});}
+  }catch(e){ss({revLoad:false,revErr:'Analysis failed: '+e.message});}
 }
 
 function dCharts(){Object.values(charts).forEach(c=>{try{c.destroy();}catch(e){}});charts={};}
@@ -725,7 +774,13 @@ function be(){
   on('mic-desc','click',()=>startSpeech('desc'));
   on('mic-notes','click',()=>startSpeech('notes'));
   on('est-cal-btn','click',estimateCals);
-  on('open-cam','click',()=>{const c=document.getElementById('cam-input');if(c){c.value='';c.click();}});
+  on('open-cam','click',()=>{
+    // Save meal form state - Android may kill the tab when camera opens
+    sessionStorage.setItem('ht_cam_pending','1');
+    sessionStorage.setItem('ht_cam_nm',JSON.stringify(S.nm));
+    sessionStorage.setItem('ht_cam_photo',S.photo||'');
+    const c=document.getElementById('cam-input');if(c){c.value='';c.click();}
+  });
   on('clr-photo','click',()=>ss({photo:null,pType:null,aiUsed:false,scUsed:false,scNote:'',vErr:''}));
   const ci2=document.getElementById('cam-input');if(ci2&&!ci2._b){ci2._b=true;ci2.addEventListener('change',e=>{if(e.target.files[0])handlePhoto(e.target.files[0]);});}
   const bi=document.getElementById('barcode-cam-input');if(bi&&!bi._b){bi._b=true;bi.addEventListener('change',e=>{if(e.target.files[0])scanBC(e.target.files[0]);});}
